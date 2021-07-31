@@ -2184,7 +2184,8 @@ def load_image_gt(dataset, config, image_id, augment=False, augmentation=None,
     # Load image and mask
     image = Image.fromarray(dataset.image_info[image_id]['imArr'].astype(np.uint8))
     mask, class_ids = dataset.load_mask(image_id)
-    original_shape = image.shape
+    #original_shape = image.shape
+	original_shape = dataset.image_info[image_id]['imArr'].shape
     image, window, scale, padding, crop = resize_image(
         image,
         min_dim=config.IMAGE_MIN_DIM,
