@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import xml.etree.ElementTree as et
 import os
 import sys
+import multiprocessing
 #sys.path.append(os.path.join(os.getcwd(), "Mask_RCNN/samples/coco/"))
 #sys.path.append(os.path.join(os.getcwd(), "Mask_RCNN"))
 #import mrcnn
@@ -3227,7 +3228,7 @@ model = train(model, trainData, valData,
                 epochs=1, 
                 layers='heads',
                 config=config,
-                path=os.join(os.getcwd(), '/logs'),
+                path=os.path.join(os.getcwd(), '/logs'),
                 model_dir=os.getcwd()
              )
 
