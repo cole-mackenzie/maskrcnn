@@ -1572,12 +1572,17 @@ class ReConfig(Config):
     # We use a GPU with 12GB memory, which can fit two images.
     # Adjust down if you use a smaller GPU.
     IMAGES_PER_GPU = 4
-
+    
+    IMAGE_SHAPE = (2200, 1700, 3)
+    
+    IMAGE_RESIZE_MODE = "none"
+    
     # Uncomment to train on 8 GPUs (default is 1)
     # GPU_COUNT = 8
 
     # Number of classes (including background)
-    NUM_CLASSES = 1 + 80  # COCO has 80 classes
+    NUM_CLASSES = 1 + 1  # Background + Word
+    
     
     USE_MINI_MASK = False
 
@@ -1597,7 +1602,7 @@ config = ReConfig()
 # In[40]:
 
 
-h, w = imageShape[:2]
+h, w = config.IMAGE_SHAPE[:2]
 
 
 # In[41]:
@@ -1916,7 +1921,7 @@ def train(model, train_dataset, val_dataset, learning_rate, epochs, layers, conf
             workers = 0
         else:
             workers = multiprocessing.cpu_count()
-        import pdb; pdb.set_trace()
+
         model.fit_generator(
                                 train_generator,
                                 initial_epoch=epoch,
