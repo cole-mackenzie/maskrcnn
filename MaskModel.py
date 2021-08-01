@@ -13,6 +13,11 @@ from keras import backend as K
 from keras import models
 from keras import engine
 import tensorflow as tf
+import scipy
+import skimage.color
+import skimage.io
+import skimage.transform
+import logging
 import matplotlib.pyplot as plt
 import xml.etree.ElementTree as et
 import os
@@ -1573,6 +1578,8 @@ class ReConfig(Config):
 
     # Number of classes (including background)
     NUM_CLASSES = 1 + 80  # COCO has 80 classes
+    
+    USE_MINI_MASK = False
 
 
 # In[39]:
@@ -1581,7 +1588,8 @@ class ReConfig(Config):
 #configs
 backbone = 'resnet101'
 topDownPyramid = 256 # neet to research; have no idea
-meta_size = 1 + 3 + 3 + 4 + 1 + 1 + 3 # need to research; have no idea
+#meta_size = 1 + 3 + 3 + 4 + 1 + 1 + 3 # need to research; have no idea
+meta_size = 1 + 3 + 3 + 4 + 1 + 1 + 1 # need to research; have no idea
 imageShape = np.asarray(Image.open('test.png')).shape
 config = ReConfig()
 
@@ -1898,6 +1906,7 @@ def train(model, train_dataset, val_dataset, learning_rate, epochs, layers, conf
         log("\nStarting at epoch {}. LR={}\n".format(epoch, learning_rate))
         log("Checkpoint Path: {}".format(checkpoint_path))
         model = set_trainable(layers, keras_model=model)
+        
         model = compileModel(model, learning_rate, config.LEARNING_MOMENTUM, config)
 
         # Work-around for Windows: Keras fails on Windows when using
@@ -1907,7 +1916,7 @@ def train(model, train_dataset, val_dataset, learning_rate, epochs, layers, conf
             workers = 0
         else:
             workers = multiprocessing.cpu_count()
-
+        import pdb; pdb.set_trace()
         model.fit_generator(
                                 train_generator,
                                 initial_epoch=epoch,
@@ -2028,7 +2037,7 @@ def data_generator(dataset, config, shuffle=True, augment=False, augmentation=No
                                              backbone_shapes,
                                              config.BACKBONE_STRIDES,
                                              config.RPN_ANCHOR_STRIDE)
-
+    
     # Keras requires a generator to run indefinitely.
     while True:
         try:
@@ -2039,13 +2048,14 @@ def data_generator(dataset, config, shuffle=True, augment=False, augmentation=No
 
             # Get GT bounding boxes and masks for image.
             image_id = image_ids[image_index]
-
+            
             # If the image source is not to be augmented pass None as augmentation
             if dataset.image_info[image_id]['source'] in no_augmentation_sources:
                 image, image_meta, gt_class_ids, gt_boxes, gt_masks =                 load_image_gt(dataset, config, image_id, augment=augment,
                               augmentation=None,
                               use_mini_mask=config.USE_MINI_MASK)
             else:
+                
                 image, image_meta, gt_class_ids, gt_boxes, gt_masks =                     load_image_gt(dataset, config, image_id, augment=augment,
                                 augmentation=augmentation,
                                 use_mini_mask=config.USE_MINI_MASK)
@@ -2182,10 +2192,11 @@ def load_image_gt(dataset, config, image_id, augment=False, augmentation=None,
         defined in MINI_MASK_SHAPE.
     """
     # Load image and mask
-    image = Image.fromarray(dataset.image_info[image_id]['imArr'].astype(np.uint8))
+    #image = Image.fromarray(dataset.image_info[image_id]['imArr'].astype(np.uint8))
+    image = dataset.image_info[image_id]['imArr']
     mask, class_ids = dataset.load_mask(image_id)
     #original_shape = image.shape
-	original_shape = dataset.image_info[image_id]['imArr'].shape
+    original_shape = dataset.image_info[image_id]['imArr'].shape
     image, window, scale, padding, crop = resize_image(
         image,
         min_dim=config.IMAGE_MIN_DIM,
@@ -2235,8 +2246,10 @@ def load_image_gt(dataset, config, image_id, augment=False, augmentation=None,
 
     # Note that some boxes might be all zeros if the corresponding mask got cropped out.
     # and here is to filter them out
+       
     _idx = np.sum(mask, axis=(0, 1)) > 0
     mask = mask[:, :, _idx]
+    
     class_ids = class_ids[_idx]
     # Bounding boxes. Note that some boxes might be all zeros
     # if the corresponding mask got cropped out.
@@ -3099,7 +3112,7 @@ class Dataset(object):
             self.add_image(
                             "words", image_id=i, path=None,
                                width=self.width, height=self.height,
-                               imArr=np.asarray(ims[i]), shapes="word"
+                               imArr=np.asarray(ims[i]), shapes=np.asarray(["word"])
                             )
             
     @property
