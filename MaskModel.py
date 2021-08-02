@@ -700,6 +700,7 @@ def detection_targets_graph(proposals, gt_class_ids, gt_boxes, gt_masks, config)
 
     Note: Returned arrays might be zero padded if not enough target ROIs.
     """
+    
     # Assertions
     asserts = [
         tf.Assert(tf.greater(tf.shape(proposals)[0], 0), [proposals],
@@ -1347,7 +1348,7 @@ class Config(object):
     NAME = None  # Override in sub-classes
 
     # NUMBER OF GPUs to use. When using only a CPU, this needs to be set to 1.
-    GPU_COUNT = 2
+    GPU_COUNT = 1
 
     # Number of images to train with on each GPU. A 12GB GPU can typically
     # handle 2 images of 1024x1024px.
@@ -1571,20 +1572,20 @@ class ReConfig(Config):
 
     # We use a GPU with 12GB memory, which can fit two images.
     # Adjust down if you use a smaller GPU.
-    IMAGES_PER_GPU = 4
+    IMAGES_PER_GPU = 1
     
-    IMAGE_SHAPE = (2200, 1700, 3)
+    IMAGE_SHAPE = (1024, 1024, 3)
     
-    IMAGE_RESIZE_MODE = "none"
+    IMAGE_RESIZE_MODE = "square"
     
     # Uncomment to train on 8 GPUs (default is 1)
     # GPU_COUNT = 8
 
     # Number of classes (including background)
-    NUM_CLASSES = 1 + 1  # Background + Word
+    NUM_CLASSES = 1 + 1 # Background + Word
     
     
-    USE_MINI_MASK = False
+    USE_MINI_MASK = True
 
 
 # In[39]:
@@ -1597,7 +1598,6 @@ topDownPyramid = 256 # neet to research; have no idea
 meta_size = 1 + 3 + 3 + 4 + 1 + 1 + 1 # need to research; have no idea
 imageShape = np.asarray(Image.open('test.png')).shape
 config = ReConfig()
-
 
 # In[40]:
 
@@ -1632,7 +1632,14 @@ input_rpn_bbox = layers.Input(shape=[None, 4], name="input_rpn_bbox", dtype=tf.i
 input_gt_class_ids = layers.Input(shape=[None], name="input_gt_class_ids", dtype=tf.int32)
 input_gt_boxes = layers.Input(shape=[None, 4], name="input_gt_boxes", dtype=tf.float32)
 gt_boxes = layers.Lambda(lambda x: norm_boxes_graph(x, K.shape(input_image)[1:3]))(input_gt_boxes)
-input_gt_masks = layers.Input(shape=[h, w, None], name="input_gt_masks", dtype=bool)
+
+if config.USE_MINI_MASK:
+
+    input_gt_masks = layers.Input(shape=[config.MINI_MASK_SHAPE[0], config.MINI_MASK_SHAPE[1], None], name="input_gt_masks", dtype=bool)
+    
+else:
+    
+    input_gt_masks = layers.Input(shape=[h, w, None], name="input_gt_masks", dtype=bool)
 
 
 # In[45]:
@@ -1921,7 +1928,7 @@ def train(model, train_dataset, val_dataset, learning_rate, epochs, layers, conf
             workers = 0
         else:
             workers = multiprocessing.cpu_count()
-
+   
         model.fit_generator(
                                 train_generator,
                                 initial_epoch=epoch,
@@ -3231,10 +3238,10 @@ words = [returnIm(imArr, a) for a in annots]
 # In[82]:
 
 
-trainData = Dataset(words[:200], annots[:200])
+trainData = Dataset(words[:2], annots[:2])
 trainData.prepare()
 
-valData = Dataset(words[200:], annots[200:])
+valData = Dataset(words[10:13], annots[10:13])
 valData.prepare()
 words = None
 
