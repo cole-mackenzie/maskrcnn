@@ -3157,14 +3157,11 @@ class Dataset(object):
         info = self.image_info[image_id]
         shapes = info['shapes']
         count = len(shapes)
-        mask = np.zeros([info['height'], info['width'], 1], dtype=np.uint8)
-
+        mask = np.zeros([info['height'], info['width'], count], dtype=np.uint8)
         imBBs = self.bboxes[image_id]
 
-        for i in range(0, len(imBBs)):
-            bbCoords = imBBs[i]
-            mask[bbCoords[1]:bbCoords[3], bbCoords[0]:bbCoords[2], :] = 1
-
+        for i, bb in enumerate(imBBs):
+            mask[:, :, i:i+1] = mask[bb[1]:bb[3], bb[0]:bb[2], :]
         # Map class names to class IDs.
 
         if type(shapes) == str:
@@ -3173,6 +3170,7 @@ class Dataset(object):
 
         else:
             class_ids = np.array([self.class_names.index(s) for s in shapes])
+
         return mask.astype(np.bool), class_ids.astype(np.int32)
 
     def prepare(self, class_map=None):
@@ -3252,8 +3250,8 @@ words = None
 
 model = train(model, trainData, valData, 
                 learning_rate=config.LEARNING_RATE, 
-                epochs=1, 
-                layers='heads',
+                epochs=10,
+                layers='all',
                 config=config,
                 path=os.path.join(os.getcwd(), '/logs'),
                 model_dir=os.getcwd()
