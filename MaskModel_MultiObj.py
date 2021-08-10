@@ -1334,6 +1334,50 @@ def mrcnn_mask_loss_graph(target_masks, target_class_ids, pred_masks):
     return loss
 
 
+def load_weights(model, filepath, by_name=False, exclude=None):
+    """Modified version of the corresponding Keras function with
+    the addition of multi-GPU support and the ability to exclude
+    some layers from loading.
+    exclude: list of layer names to exclude
+    """
+    import h5py
+    # Conditional import to support versions of Keras before 2.2
+    # TODO: remove in about 6 months (end of 2018)
+    try:
+        from keras.engine import saving
+    except ImportError:
+        # Keras before 2.2 used the 'topology' namespace.
+        from keras.engine import topology as saving
+
+    if exclude:
+        by_name = True
+
+    if h5py is None:
+        raise ImportError('`load_weights` requires h5py.')
+    f = h5py.File(filepath, mode='r')
+    if 'layer_names' not in f.attrs and 'model_weights' in f:
+        f = f['model_weights']
+
+    # In multi-GPU training, we wrap the model. Get layers
+    # of the inner model because they have the weights.
+    layers = model.inner_model.layers if hasattr(model, "inner_model")\
+        else model.layers
+
+    # Exclude some layers
+    if exclude:
+        layers = filter(lambda l: l.name not in exclude, layers)
+
+    if by_name:
+        saving.load_weights_from_hdf5_group_by_name(f, layers)
+    else:
+        saving.load_weights_from_hdf5_group(f, layers)
+    if hasattr(f, 'close'):
+        f.close()
+
+    # Update the log directory
+    # set_log_dir(filepath)
+
+    return model
 # In[37]:
 
 
@@ -1828,7 +1872,7 @@ outputs = [rpn_class_logits, rpn_class, rpn_bbox,
            rpn_rois, output_rois,
            rpn_class_loss, rpn_bbox_loss, class_loss, bbox_loss, mask_loss]
 model = models.Model(inputs, outputs, name='mask_rcnn')
-
+model = load_weights(model, 'mask_rcnn_coco_0001.h5', by_name=True)
 
 # # Model Training Routines
 
