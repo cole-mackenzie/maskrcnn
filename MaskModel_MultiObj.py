@@ -3161,7 +3161,7 @@ class Dataset(object):
         imBBs = self.bboxes[image_id]
 
         for i, bb in enumerate(imBBs):
-            mask[:, :, i:i+1] = mask[bb[1]:bb[3], bb[0]:bb[2], :]
+            mask[bb[1]:bb[3], bb[0]:bb[2], i:i+1] = 1
         # Map class names to class IDs.
 
         if type(shapes) == str:
