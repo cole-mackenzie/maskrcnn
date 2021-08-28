@@ -1627,7 +1627,14 @@ class ReConfig(Config):
 
     # Number of classes (including background)
     NUM_CLASSES = 1 + 1 # Background + Word
-    
+
+    RPN_TRAIN_ANCHORS_PER_IMAGE = 800
+    MAX_GT_INSTANCES = 300
+    PRE_NMS_LIMIT = 12000
+    POST_NMS_ROIS_TRAINING = 6000
+
+    DETECTION_MAX_INSTANCES = 1000
+    POST_NMS_ROIS_INFERENCE = 8000
     
     USE_MINI_MASK = True
 
@@ -1872,7 +1879,7 @@ outputs = [rpn_class_logits, rpn_class, rpn_bbox,
            rpn_rois, output_rois,
            rpn_class_loss, rpn_bbox_loss, class_loss, bbox_loss, mask_loss]
 model = models.Model(inputs, outputs, name='mask_rcnn')
-model = load_weights(model, 'mask_rcnn_coco_0001.h5', by_name=True)
+model = load_weights(model, 'mask_rcnn_coco_0010.h5', by_name=True)
 
 # # Model Training Routines
 
@@ -3248,7 +3255,105 @@ class Dataset(object):
                     self.source_class_ids[source].append(i)
 
 
-# In[81]:
+def shuffleImage(origDims, imageArr, resize=False, resizeRange=False, maxIters=False):
+
+    shuffleAnnots = []
+
+    totalRows, totalCols, _ = imageArr.shape
+
+    emptyArr = np.full(imageArr.shape, 255)
+
+    for i, dim in enumerate(origDims):
+
+        finished = False
+
+        while not finished:
+
+            randomRow = random.randint(0, totalRows)
+            randomCol = random.randint(0, totalCols)
+
+            bbRows = dim[3] - dim[1]
+            bbCols = dim[2] - dim[0]
+
+            if (randomCol + bbCols) > totalCols or (randomRow + bbRows) > totalRows:
+
+                pass
+
+            else:
+
+                newCoords = (randomCol, randomRow, randomCol + bbCols, randomRow + bbRows)
+
+                if type(resize) != bool and i % resize == 0:
+
+                    sizer = random.randint(1, resizeRange)
+                    subIm = imageArr[dim[1]:dim[3], dim[0]:dim[2], :].copy()
+                    subLen, subWid, _ = subIm.shape
+                    subIm = np.asarray(Image.fromarray(subIm.astype(np.uint8)).resize((subWid * sizer, subLen * sizer)))
+                    newCoords = (
+                        newCoords[0],
+                        newCoords[1],
+                        newCoords[0] + ((newCoords[2] - newCoords[0]) * sizer),
+                        newCoords[1] + ((newCoords[3] - newCoords[1]) * sizer)
+                    )
+
+                else:
+
+                    subIm = imageArr[dim[1]:dim[3], dim[0]:dim[2], :].copy()
+
+                # test if randomly selected range is empty
+                newRange = emptyArr[newCoords[1]:newCoords[3], newCoords[0]:newCoords[2], :]
+                finished = newRange.mean() == 255
+
+        if newCoords[3] > totalRows or newCoords[2] > totalCols:
+
+            pass
+
+        else:
+
+            emptyArr[newCoords[1]:newCoords[3], newCoords[0]:newCoords[2], :] = subIm
+            shuffleAnnots.append(newCoords)
+
+    return emptyArr, shuffleAnnots
+
+def createRow(wordDict, wordIndices, maxHeight, row, cols, padding):
+
+    wordArrs = []
+    wordArrs.append(np.full((maxHeight, padding, 3), 255))
+    wordBBs = []
+    # tracks columns to adjust bounding boxes
+    col = padding
+    for i in wordIndices:
+
+        # add randomly sized space in between words
+        space = random.randint(5, 50)
+        col = col + space
+
+        if col < cols - padding:
+
+            newArr = np.full((maxHeight, space, 3), 255)
+            wordArrs.append(newArr)
+
+            word = wordDict['Array'][i]
+            newBB = (col, row, min(col + word.shape[1], cols - padding), row + word.shape[0])
+            newArr = np.full((maxHeight, word.shape[1], 3), 255)
+            newArr[:word.shape[0], :word.shape[1], :] = word
+
+            wordArrs.append(newArr)
+            wordBBs.append(newBB)
+            col = col + newArr.shape[1]
+
+        else:
+
+            pass
+
+    conCat = np.concatenate(wordArrs, axis=1)
+
+    missing = max(conCat.shape[1] - (padding * 2), 0)
+    missAdds = np.full((maxHeight, missing, 3), 255)
+
+    conCat = np.concatenate([conCat, missAdds], axis=1)
+
+    return conCat, wordBBs
 
 
 image = Image.open('test.png')
@@ -3269,17 +3374,68 @@ for child in labelRoot.getchildren():
                         )
                       )
 
+
+wordDict = {'Array': [], 'BBox': []}
+
+for a in annots:
+
+    wordDict['BBox'].append(a)
+
+    wordArr = imArr[a[1]:a[3], a[0]:a[2], :].copy()
+
+    wordDict['Array'].append(wordArr)
+
+
 numImages = 1000
 
 imDict = {'Arrays':[], 'Annots':[]}
 
 for x in range(0, numImages):
 
-    numWords = random.randint(0, len(annots))
-    wordIndices = random.sample(range(0, len(annots)), numWords)
-    bbs = [annots[a] for a in wordIndices]
-    imDict['Annots'].append(bbs)
-    imDict['Arrays'].append(returnIm(imArr, [annots[a] for a in wordIndices]))
+    dice = random.randint(0, 3)
+
+    if dice % 3:
+
+        rows, cols, _ = imArr.shape
+        empArr = np.full(imArr.shape, 255)
+
+        # create a little bordering
+        borderLen = 50
+        cumBBs = []
+
+        for r in range(borderLen, rows - borderLen):
+
+            if empArr[r, :, :].mean() != 255:
+
+                pass
+
+            else:
+
+                wordIndices = random.sample(range(0, len(wordDict['Array'])), 50)
+                maxHeight = max([wordDict['Array'][i].shape[0] for i in wordIndices])
+                rowIm, bbs = createRow(wordDict, wordIndices, maxHeight, r, cols, borderLen)
+                cumBBs = cumBBs + bbs
+                empArr[r:r + rowIm.shape[0], borderLen:cols - borderLen, :] = rowIm[:, borderLen:cols - borderLen, :]
+
+        imDict['Arrays'].append(empArr)
+        imDict['Annots'].append(cumBBs)
+
+    else:
+
+        numWords = random.randint(0, len(annots))
+        wordIndices = random.sample(range(0, len(annots)), numWords)
+        bbs = [annots[a] for a in wordIndices]
+
+        shuffleArr, shuffleAnnot = shuffleImage(
+            bbs,
+            returnIm(imArr, [annots[a] for a in wordIndices]),
+            resize=3,
+            resizeRange=4,
+            maxIters=30
+        )
+
+        imDict['Arrays'].append(shuffleArr)
+        imDict['Annots'].append(shuffleAnnot)
 
 trainData = Dataset(imDict['Arrays'][:int(numImages/2)], imDict['Annots'][:int(numImages/2)])
 trainData.prepare()
