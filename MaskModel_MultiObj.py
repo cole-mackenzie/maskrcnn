@@ -1881,7 +1881,7 @@ outputs = [rpn_class_logits, rpn_class, rpn_bbox,
            rpn_rois, output_rois,
            rpn_class_loss, rpn_bbox_loss, class_loss, bbox_loss, mask_loss]
 model = models.Model(inputs, outputs, name='mask_rcnn')
-model = load_weights(model, 'mask_rcnn_coco_0010.h5', by_name=True)
+model = load_weights(model, 'mask_rcnn_coco_0001.h5', by_name=True)
 
 # # Model Training Routines
 
