@@ -1619,7 +1619,9 @@ class ReConfig(Config):
     IMAGES_PER_GPU = 1
     
     IMAGE_SHAPE = (1024, 1024, 3)
-    
+
+    STEPS_PER_EPOCH = 50
+
     IMAGE_RESIZE_MODE = "square"
     
     # Uncomment to train on 8 GPUs (default is 1)
@@ -3385,81 +3387,76 @@ for a in annots:
 
     wordDict['Array'].append(wordArr)
 
-revolutions = 10
+numImages = 100
 
-for rev in revolutions:
-    print(rev)
+imDict = {'Arrays':[], 'Annots':[]}
 
-    numImages = 100
+for x in range(0, numImages):
 
-    imDict = {'Arrays':[], 'Annots':[]}
+    dice = random.randint(0, 3)
 
-    for x in range(0, numImages):
+    if dice % 3:
 
-        dice = random.randint(0, 3)
+        rows, cols, _ = imArr.shape
+        empArr = np.full(imArr.shape, 255)
 
-        if dice % 3:
+        # create a little bordering
+        borderLen = 50
+        cumBBs = []
 
-            rows, cols, _ = imArr.shape
-            empArr = np.full(imArr.shape, 255)
+        for r in range(borderLen, rows - borderLen):
 
-            # create a little bordering
-            borderLen = 50
-            cumBBs = []
+            if empArr[r, :, :].mean() != 255:
 
-            for r in range(borderLen, rows - borderLen):
+                pass
 
-                if empArr[r, :, :].mean() != 255:
+            else:
 
-                    pass
+                wordIndices = random.sample(range(0, len(wordDict['Array'])), 50)
+                maxHeight = max([wordDict['Array'][i].shape[0] for i in wordIndices])
+                rowIm, bbs = createRow(wordDict, wordIndices, maxHeight, r, cols, borderLen)
+                cumBBs = cumBBs + bbs
+                empArr[r:r + rowIm.shape[0], borderLen:cols - borderLen, :] = rowIm[:, borderLen:cols - borderLen, :]
 
-                else:
+        imDict['Arrays'].append(empArr)
+        imDict['Annots'].append(cumBBs)
 
-                    wordIndices = random.sample(range(0, len(wordDict['Array'])), 50)
-                    maxHeight = max([wordDict['Array'][i].shape[0] for i in wordIndices])
-                    rowIm, bbs = createRow(wordDict, wordIndices, maxHeight, r, cols, borderLen)
-                    cumBBs = cumBBs + bbs
-                    empArr[r:r + rowIm.shape[0], borderLen:cols - borderLen, :] = rowIm[:, borderLen:cols - borderLen, :]
+    else:
 
-            imDict['Arrays'].append(empArr)
-            imDict['Annots'].append(cumBBs)
+        numWords = random.randint(0, len(annots))
+        wordIndices = random.sample(range(0, len(annots)), numWords)
+        bbs = [annots[a] for a in wordIndices]
 
-        else:
+        shuffleArr, shuffleAnnot = shuffleImage(
+            bbs,
+            returnIm(imArr, [annots[a] for a in wordIndices]),
+            resize=3,
+            resizeRange=4,
+            maxIters=30
+        )
 
-            numWords = random.randint(0, len(annots))
-            wordIndices = random.sample(range(0, len(annots)), numWords)
-            bbs = [annots[a] for a in wordIndices]
+        imDict['Arrays'].append(shuffleArr)
+        imDict['Annots'].append(shuffleAnnot)
 
-            shuffleArr, shuffleAnnot = shuffleImage(
-                bbs,
-                returnIm(imArr, [annots[a] for a in wordIndices]),
-                resize=3,
-                resizeRange=4,
-                maxIters=30
-            )
+trainData = Dataset(imDict['Arrays'][:int(numImages/2)], imDict['Annots'][:int(numImages/2)])
+trainData.prepare()
 
-            imDict['Arrays'].append(shuffleArr)
-            imDict['Annots'].append(shuffleAnnot)
-
-    trainData = Dataset(imDict['Arrays'][:int(numImages/2)], imDict['Annots'][:int(numImages/2)])
-    trainData.prepare()
-
-    valData = Dataset(imDict['Arrays'][int(numImages/2):], imDict['Annots'][int(numImages/2):])
-    valData.prepare()
-    words = None
+valData = Dataset(imDict['Arrays'][int(numImages/2):], imDict['Annots'][int(numImages/2):])
+valData.prepare()
+words = None
 
 
-    # In[83]:
+# In[83]:
 
 
-    model = train(model, trainData, valData,
-                    learning_rate=config.LEARNING_RATE,
-                    epochs=1,
-                    layers='all',
-                    config=config,
-                    path=os.path.join(os.getcwd(), '/logs'),
-                    model_dir=os.getcwd()
-                 )
+model = train(model, trainData, valData,
+                learning_rate=config.LEARNING_RATE,
+                epochs=1,
+                layers='all',
+                config=config,
+                path=os.path.join(os.getcwd(), '/logs'),
+                model_dir=os.getcwd()
+             )
 
 
 # In[ ]:
